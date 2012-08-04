@@ -1,0 +1,23 @@
+#!/bin/bash
+customBuilder='LG';
+customName='Optimus2x';
+customFM='';
+function customFunc(){
+	log "LG P990 Modifikace" 1
+	
+	# Youtube APP fix
+	echo "" >> build.prop
+	echo "# Fix for Vodafone string search of hwmediaprovider" >> build.prop
+	echo "ro.build.lge.version.release=LGP990-V20l" >> build.prop
+	echo "# SpeedTweaks" >> build.prop
+	echo "debug.sf.hw=1" >> build.prop
+	echo "ro.lge.proximity.delay=25" >> build.prop
+	echo "mot.proximity.delay=25" >> build.prop
+	
+	# Gtalk video podpora, v budoucnu
+	mkdir -p "$base/_output/system/lib/"
+	cp -f "$home/stuff/lg/Talk.apk" "$base/_output/system/app/"
+	cp -f "$home/stuff/lg/Talk2.apk" "$base/_output/system/app/"
+	cp -f "$home/stuff/lg/GoogleServicesFramework.apk" "$base/_output/system/app/"
+	cp -f "$home/stuff/lg/libtalk_jni.so" "$base/_output/system/lib/"
+};

@@ -1,0 +1,4 @@
+#!/bin/bash
+customBuilder='Samsung';
+customName='I9000';
+customFM='FM_htc';

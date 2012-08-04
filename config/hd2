@@ -1,0 +1,4 @@
+#!/bin/bash
+customBuilder='HTC';
+customName='HD2';
+customFM='FM_htc';

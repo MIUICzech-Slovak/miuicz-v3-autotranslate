@@ -1,0 +1,4 @@
+#!/bin/bash
+customBuilder='Google';
+customName='N1';
+customFM='FM_htc';

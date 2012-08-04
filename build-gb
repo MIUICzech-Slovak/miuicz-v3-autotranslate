@@ -1,0 +1,266 @@
+#!/bin/bash
+# Author: Radovan Kepak
+
+device=$1
+version=$2
+
+# Write some basic info
+clear;
+echo ":: MIUI Czech autocompiler";
+echo ":: $device $version build";
+echo '';
+
+# Vychozi nastaveni, co odstranit a co nechat
+apkTranslateRemove=(Gmail.apk Talk.apk Talk2.apk);
+apkRemove=(MIUIStats.apk UserbookProvider.apk miliao.apk LatinIME.apk Vending.apk);
+
+base="/home/android/temp";
+log="/home/android/logs/$device-$version"
+home="/home/android"
+dbin="/home/bckp/bin"
+
+# Funkce pro vypis
+function log(){
+	echo ":: $1" >> $log
+	if [ $2 ]; then
+		echo ":: $1";
+	fi
+}
+
+function dirCheck(){
+	log "dirCheck on $1"
+	if [ $1 == "/" ]; then
+		exit 5
+	fi
+	
+	if [ -d $1 ]; then
+		rm -rf $1;
+	fi
+	mkdir $1;
+}
+
+# Zacneme autokompilaci
+echo '' > $log
+log "Autobuild | Device $device | Version $version"
+
+# Zjistime jestli mame zdrojovy soubor
+if [ ! -f "$home/config/$device" ]; then
+	log "Nenalezen config soubor na adrese: $home/config/$device" 1
+	exit 1
+fi
+. $home/config/$device
+
+# Vygenerujeme aresare pro praci, ty pak smazeme!
+dirCheck "$base/_translation"
+dirCheck "$base/_hacks"
+dirCheck "$base/_output"
+
+# Pripravime jmena pro ZIP
+log "Pripravuji zdrojove soubory" 1
+sourceName="miuiandroid_$customName-$version.zip";
+sourceZip="$home/source/$sourceName";
+outputZip="$home/output/miuicz-$device-$version-unsigned.zip";
+outputZipSigned="$home/output/miuicz-$device-$version.zip";
+
+if [ -f $outputZip ]; then
+	rm -rf $outputZip >> $log
+fi
+
+# Stahneme soubor pokud jej nemame umisten na disku
+if [ ! -f $sourceZip ]; then
+	log "Zip soubor neexistuje"
+	cd "$home/source"
+	wget "http://caro.miuiandroid.com/$version/$sourceName" >> $log
+fi
+
+if [ ! -f $sourceZip ]; then
+	log "Zip se nepodarilo stahnout"
+	exit 1
+fi
+
+if [ ! `unzip -t $sourceZip` 2>/dev/null ]; then
+	log "Chyba: nepodarilo se stahnout platny ZIP archiv" 1
+	exit 1
+fi
+
+log "Pouzivam soubor: $sourceZip";
+
+# Nastavime patricny aapt tool
+# apktool kopirujeme at nehaze hlasky
+log "Generovani symlinku na AAPT"
+cp -f "$dbin.gb/apktool" "$dbin/"
+cp -sf "$dbin.gb/aapt" "$dbin/"
+cp -sf "$dbin.gb/apktool.jar" "$dbin/"
+cp -sf "$dbin.gb/smali.jar" "$dbin/"
+cp -sf "$dbin.gb/baksmali.jar" "$dbin/"
+
+# Vyextrahujeme APK soubory
+log "Extrakce APK souboru" 1;
+cd "$base/_translation";
+unzip -jo $sourceZip system/app/*	>> $log
+unzip -jo $sourceZip system/framework/framework-res.apk >> $log
+temp=(`echo ${apkTranslateRemove[*]} ${apkRemove[*]}`);
+for i in ${temp[*]}
+do
+	rm -rf $i >> $log
+done
+unset temp;
+
+# Dekompilace pomoci APK Tool
+log "Dekompilace APK souboru" 1;
+cd "$base/_translation"
+apktool if framework-res.apk 2>> $log;
+for i in $(find -maxdepth 1 -mindepth 1 -type f -name '*.apk' -print)
+do
+	echo "Dekompilace $i" >> $log
+	apktool d -f $i 2>> $log
+done
+
+# Hack updateru
+if [ -d "$base/_translation/Updater/smali/com/android/updater/utils/" ];then
+log "Zmena update serveru na CZ" 1
+cd "$base/_translation/Updater/smali/com/android/updater/utils/"
+sed -i 's/http:\/\/miuiandroid.com\/ota\/update.php/http:\/\/ota.miui.cz\/updater.php/g' SysUtils.smali
+fi
+
+# Vlozeni XML a rekompilace
+log "Rekompilace APK souboru" 1
+cd "$base/_translation"
+for i in $(find . -maxdepth 1 -mindepth 1 -type d -printf '%P ')
+do
+	if [ $i == 'FM' ]; then
+		s=$customFM
+	else
+		s=$i
+	fi
+	
+	if [ -d "$home/xml/gb/$s" ]; then
+		echo "Vkladani $i" >> $log
+		cd "$home/xml/gb/$s";
+		cp -fR * "$base/_translation/$i"
+	fi
+
+	cd "$base/_translation"	
+	echo "Rekompilace $i" >> $log
+	apktool b $i 2>> $log
+done
+#
+# Tvorba pouzitelnych APK
+cd "$base/_translation"
+log "Tvorba pouzitelnych APK"
+for i in $(find . -maxdepth 1 -mindepth 1 -type d -printf '%P ')
+do
+	#Zalogujeme
+	echo "Sestavuji $i" >> $log
+
+	#Resources a Classes
+	7za a -tzip $i.apk $base/_translation/$i/build/apk/resources.arsc -mx9	>> $log
+	7za a -tzip $i.apk $base/_translation/$i/build/apk/classes.dex -mx9 >> $log
+	
+	#Obrazky, nejdrive prepiseme ty co mame ve slozce, pak prehrajem znovu
+	7za x "$i.apk" -o"temp" >> $log
+	7za u -tzip $i.apk "$base/_translation/$i/build/apk/res" -uy0 -mx9 >> $log
+	7za u -tzip $i.apk "$base/_translation/temp/res" -mx9 >> $log
+	
+	#Smazeme temp
+	rm -rf "temp" >> $log
+done
+7za u -tzip framework-res.apk $home/stuff/assets -mx9 >> $log
+
+# Nakopirujeme vstupni ZIP
+cp -f $sourceZip $outputZip >> $log
+
+# Odebereme nepotrebne soubory
+log "Mazani nepotrebnych souboru" 1
+for i in ${apkRemove[*]}
+do
+	echo "Mazani $i" >> $log
+	zip -dq $outputZip "/system/app/$i" 2>>$log
+done
+zip -dq $outputZip "/system/media/bootanimation.zip" 2>>$log
+
+# Pripravime soubory pro vlozeni
+cd "$base/_translation";
+mkdir -p "$base/_output/system/framework/"
+mkdir -p "$base/_output/system/app/"
+mkdir -p "$base/_output/system/lib/"
+mkdir -p "$base/_output/system/etc/"
+for i in $(find . -maxdepth 1 -type f -name '*.apk' -printf '%P ')
+do
+	if [ $i == 'framework-res.apk' ]; then
+		cp $i "$base/_output/system/framework/"
+	else
+		cp $i "$base/_output/system/app/"
+	fi
+done
+
+# Vlozime APK soubory
+cp "$home/stuff/LatinIME.apk" "$base/_output/system/app/"
+cp "$home/stuff/libjni_latinime.so" "$base/_output/system/lib/"
+cp "$home/stuff/Vending.apk" "$base/_output/system/app/"
+
+# Hacky a modifikace
+cd "$base/_hacks";
+unzip -jqqo $sourceZip system/framework/framework.jar > /dev/null
+unzip -jqqo $sourceZip system/build.prop > /dev/null
+unzip -jqqo $sourceZip system/default.prop 2>> /dev/null
+
+# Dailer mod
+log "T9 patch pro telefon"
+cd "$base/_hacks";
+unzip -jqqo "framework.jar" classes.dex
+if [ -f "classes.dex" ]; then
+	STDOUT_LOG=`mktemp "/tmp/build.XXXXXX"`
+	java -jar "/home/bckp/bin/baksmali.jar" -o classes classes.dex
+	cp -f "$home/stuff/HanziToPinyin.smali" "$base/_hacks/classes/com/android/internal/util/HanziToPinyin.smali"
+	java -Xmx512M -jar "/home/bckp/bin/smali.jar" classes -o classes.dex | tee STDOUT_LOG
+	if [ ! -s STDOUT_LOG ];then
+		java -Xmx512M -jar "/home/bckp/bin/smali.jar" classes -o classes.dex
+	fi
+	7za u -tzip "$base/_hacks/framework.jar" "classes.dex" >> $log;
+	rm -rf STDOUT_LOG;
+else
+	log "Chyba" 1
+fi
+
+# Modifikace Build.prop
+log "Modifikace build.prop" 1
+sed -i 's/\(ro.product.locale.language\)=en/\1=cs/g' build.prop
+sed -i 's/\(ro.product.locale.region\)=US/\1=CZ/g' build.prop
+sed -i 's/ro.modversion=CyanogenMod.*$/ro.modversion=CyanogenMod-KANG/g' build.prop
+sed -i 's/ro.rommanager.developerid=miuiandroid/#/g' build.prop
+
+# Vlozime novy apn list z CM
+log "Modifikace apns-conf.xml" 1
+cp "$home/stuff/apns-conf.xml" "$base/_output/system/etc"
+
+# Vlozime novy GPS soubor
+log "Modifikace gps.conf" 1
+cp "$home/stuff/gps.conf" "$base/_output/system/etc"
+cp "$home/stuff/SuplRootCert" "$base/_output/system/etc"
+
+# Spustime specificke veci pro dany telefon
+customFunc;
+
+# Modifikace Default.prop pokud existuje, kdyz ne, kopirujeme
+log "Modifikace default.prop" 1
+if [ -f "default.prop" ]; then
+	sed -i 's/persist.sys.timezone=.*$/persist.sys.timezone=Europe\/Berlin/g' default.prop
+else
+	echo "persist.sys.timezone=Europe/Berlin" >> default.prop
+fi
+cd "$base/_hacks";
+cp -f "build.prop" "$base/_output/system/"
+cp -f "default.prop" "$base/_output/system/"
+cp -f "framework.jar" "$base/_output/system/framework/"
+
+# Zaverecne zabaleni modifikovanych souboru
+log "Zaverecne kompilace" 1
+cd "$base/_output/";
+7za u $outputZip * >> $log
+java -jar "$dbin/signapk.jar" "$dbin/certificate.pem" "$dbin/key.pk8" $outputZip $outputZipSigned
+if [ -f $outputZip ]; then
+	rm -rf $outputZip;
+fi
+
+exit 0;

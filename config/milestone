@@ -1,0 +1,4 @@
+#!/bin/bash
+customBuilder='Motorola';
+customName='Milestone';
+customFM='';

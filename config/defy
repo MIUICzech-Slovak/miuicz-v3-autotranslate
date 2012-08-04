@@ -1,0 +1,5 @@
+#!/bin/bash
+customBuilder='Motorola';
+customName='Defy';
+customID='jordan';
+customFM='FM_defy';

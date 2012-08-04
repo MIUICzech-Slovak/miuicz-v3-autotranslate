@@ -1,0 +1,26 @@
+#!/bin/bash
+# Author: Radovan Kepak
+
+version=$1
+
+# Write some basic info
+clear;
+echo "MIUI Czech autocompiler | Loader";
+echo '';
+
+home="/home/android/config"
+cd $home
+
+# BuildProcess
+# GB Tree
+build-gb defy $version
+build-gb desire $version
+build-gb desires $version
+build-gb desirez $version
+build-gb dhd $version
+build-gb galaxys $version
+build-gb hd2 $version
+build-gb incredibles $version
+build-gb milestone $version
+build-gb n1 $version
+build-gb optimus $version
