@@ -85,15 +85,6 @@ fi
 
 log "Pouzivam soubor: $sourceZip";
 
-# Nastavime patricny aapt tool
-# apktool kopirujeme at nehaze hlasky
-log "Generovani symlinku na AAPT"
-cp -f "$dbin.gb/apktool" "$dbin/"
-cp -sf "$dbin.gb/aapt" "$dbin/"
-cp -sf "$dbin.gb/apktool.jar" "$dbin/"
-cp -sf "$dbin.gb/smali.jar" "$dbin/"
-cp -sf "$dbin.gb/baksmali.jar" "$dbin/"
-
 # Vyextrahujeme APK soubory
 log "Extrakce APK souboru" 1;
 cd "$base/_translation";
